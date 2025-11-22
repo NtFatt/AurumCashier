@@ -4,9 +4,7 @@ export async function fetchNewOrders() {
   try {
     const res = await api.get("/api/pos/orders");
 
-    const raw = Array.isArray(res.data)
-      ? res.data
-      : Array.isArray(res.data?.data)
+    const raw = Array.isArray(res.data?.data)
       ? res.data.data
       : [];
 
@@ -22,20 +20,20 @@ export async function fetchNewOrders() {
 
       createdAt: o.CreatedAt,
 
-      // FIX QUAN TRỌNG – luôn đảm bảo mảng
       items: Array.isArray(o.Items)
         ? o.Items.map((i: any) => ({
             id: i.ProductId,
             productId: i.ProductId,
             quantity: i.Quantity,
-            price: i.Price,
+            price: i.Price ?? 0,
 
             name: i.ProductName,
             image: i.ImageUrl,
 
-            size: i.Size || null,
-            toppings: i.Toppings || [],
-            notes: i.Notes || "",
+            // hệ POS KHÔNG CÓ size/toppings/notes
+            size: null,
+            toppings: [],
+            notes: "",
           }))
         : [],
     }));
