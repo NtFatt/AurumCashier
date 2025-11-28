@@ -8,39 +8,42 @@ export default function Payment() {
   const { orders, completePayment, refreshOrders } = useOrders();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
-  // ===============================================
-  // 1. AUTO REFRESH KHI MỞ TRANG PAYMENT
-  // ===============================================
+  // Load danh sách khi mở trang
   useEffect(() => {
     refreshOrders();
   }, []);
 
-  // ===============================================
-  // 2. LỌC ĐƠN HOÀN THÀNH TỪ BARISTA -> STATUS = "done"
-  // ===============================================
+  // ==============================
+  // ĐƠN CHỜ THANH TOÁN
+  // ==============================
   const pendingPaymentOrders = orders.filter(
-    (order) => order.status?.toLowerCase() === "done"
+    (o) =>
+      o.status === "done" &&       // barista đã pha xong
+      o.paymentStatus !== "paid"   // chưa thanh toán
   );
 
-  // ===============================================
-  // 3. LẤY ĐƠN ĐANG CHỌN
-  // ===============================================
-  const selectedOrder = orders.find((o) => o.id === selectedOrderId);
+  const selectedOrder = orders.find(
+    (o) => Number(o.id) === selectedOrderId
+  );
 
-  // ===============================================
-  // 4. HANDLE THANH TOÁN
-  // ===============================================
+  // ==============================
+  // XỬ LÝ THANH TOÁN
+  // ==============================
   const handleCompletePayment = async (paymentMethod: any, customerPaid: number) => {
-    if (selectedOrderId) {
-      await completePayment(selectedOrderId, paymentMethod, customerPaid);
-      toast.success("Thanh toán thành công!");
-      setSelectedOrderId(null);
-    }
+    if (!selectedOrderId) return;
+
+    await completePayment(selectedOrderId, paymentMethod, customerPaid);
+
+    toast.success("Thanh toán thành công!");
+
+    await refreshOrders();  // để đơn biến khỏi Payment & xuất hiện ở History
+
+    setSelectedOrderId(null);
   };
 
-  // ===============================================
-  // 5. NẾU ĐANG Ở MÀN PAYMENTS
-  // ===============================================
+  // ==============================
+  // MÀN CHI TIẾT THANH TOÁN
+  // ==============================
   if (selectedOrder) {
     return (
       <div className="p-6">
@@ -53,9 +56,9 @@ export default function Payment() {
     );
   }
 
-  // ===============================================
-  // 6. TRANG CHỜ THANH TOÁN
-  // ===============================================
+  // ==============================
+  // UI CHỜ THANH TOÁN
+  // ==============================
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -67,7 +70,7 @@ export default function Payment() {
         {pendingPaymentOrders.map((order) => (
           <button
             key={order.id}
-            onClick={() => setSelectedOrderId(order.id)}
+            onClick={() => setSelectedOrderId(Number(order.id))}
             className="text-left p-5 bg-card border border-border rounded-xl hover:border-accent transition-colors"
           >
             <div className="flex items-center justify-between mb-3">
@@ -77,12 +80,10 @@ export default function Payment() {
               </span>
             </div>
 
-            {/* ITEMS */}
             <div className="space-y-1 mb-3">
-              {(order.Items || order.items || []).map((item: any, idx: number) => (
+              {order.items.map((item: any, idx: number) => (
                 <p key={idx} className="text-sm">
-                  {item.ProductName || item.name}{" "}
-                  {item.Size || item.size ? `(${item.Size || item.size})` : ""}
+                  {item.name} {item.size ? `(${item.size})` : ""}
                 </p>
               ))}
             </div>
@@ -90,8 +91,7 @@ export default function Payment() {
             <div className="flex justify-between items-center pt-3 border-t border-border">
               <span className="text-muted-foreground text-sm">Tổng:</span>
               <span className="text-accent text-lg font-bold">
-                {order.total?.toLocaleString("vi-VN") || 
-                 order.Total?.toLocaleString("vi-VN")}₫
+                {order.total.toLocaleString("vi-VN")}₫
               </span>
             </div>
           </button>
@@ -100,7 +100,9 @@ export default function Payment() {
 
       {pendingPaymentOrders.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">Không có đơn hàng chờ thanh toán</p>
+          <p className="text-muted-foreground">
+            Không có đơn hàng chờ thanh toán
+          </p>
         </div>
       )}
     </div>

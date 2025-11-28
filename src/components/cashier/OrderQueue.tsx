@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Clock, Check, Coffee } from "lucide-react";
 
 export function OrderQueue() {
-  const { orders } = useOrders();
+const { orders = [] } = useOrders() || {};
 
   // Dùng cùng dữ liệu với Processing.tsx
   const workflowOrders = orders.filter((order) =>

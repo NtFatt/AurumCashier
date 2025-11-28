@@ -6,11 +6,14 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 
+import { OrderType } from "@/contexts/OrderContext";
+
 interface PaymentScreenProps {
-  order: Order;
-  onComplete: (paymentMethod: PaymentMethod, customerPaid: number) => void;
+  order: OrderType;    // ✅ DÙNG TYPE ĐÚNG CỦA CASHIER
+  onComplete: (method: any, paid: number) => void;
   onCancel: () => void;
 }
+
 
 export function PaymentScreen({ order, onComplete, onCancel }: PaymentScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");

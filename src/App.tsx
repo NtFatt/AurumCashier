@@ -27,19 +27,13 @@ const App = () => (
 
       <BrowserRouter>
         <AuthProvider>
-
-          {/* PHẢI ĐẶT OrderProvider Ở ĐÂY */}
           <OrderProvider>
-
             <Routes>
-
               {/* PUBLIC ROUTE */}
               <Route path="/login" element={<Login />} />
-
               {/* PROTECTED ROUTES */}
               <Route element={<ProtectedRoute />}>
                 <Route element={<CashierLayout />}>
-
                   <Route index element={<NewOrders />} />
                   <Route path="/" element={<NewOrders />} />
                   <Route path="direct-sales" element={<DirectSales />} />
@@ -47,22 +41,16 @@ const App = () => (
                   <Route path="payment" element={<Payment />} />
                   <Route path="history" element={<History />} />
                   <Route path="menu" element={<Menu />} />
-
                 </Route>
               </Route>
-
               <Route path="*" element={<NotFound />} />
             </Routes>
-
           </OrderProvider>
-
         </AuthProvider>
       </BrowserRouter>
-
     </TooltipProvider>
   </QueryClientProvider>
 );
-
 
 export default App;
 //hahaha

@@ -1,70 +1,50 @@
 import { createContext, useContext, useState } from "react";
-import { 
+import {
     payOrder,
     fetchCashierOrders,
-    fetchBaristaOrders 
+    fetchBaristaOrders
 } from "@/services/orderWorkflow";
 
-// ============================================
-// 0. ORDER TYPE DEFINITION (CHUẨN HÓA)
-// ============================================
 export interface OrderType {
-    id: string;
+    id: number;
     orderNumber: number;
-    status:
-        | "new"
-        | "pending"
-        | "waiting"
-        | "preparing"
-        | "brewing"
-        | "processing"
-        | "completed"
-        | "cancelled";
-
-    items: Array<any>;
+    status: string;
+    items: any[];
     total: number;
-
-    time: Date | string; // Cho phép cả 2
-    type?: string;       // POS không có field này
-    cashier?: string;    // POS không có field này
+    time: Date | string;
+    type?: string;
+    cashier?: string;
     paymentMethod?: string;
 }
 
-// ============================================
-// 1. OrderContext TYPE
-// ============================================
 interface OrderContextType {
     orders: OrderType[];
-    setOrders: React.Dispatch<React.SetStateAction<OrderType[]>>;
+    cashierOrders: OrderType[];
+    baristaOrders: OrderType[];
+    historyOrders: OrderType[];
+
     refreshOrders: () => Promise<void>;
-    completePayment: (
-        orderId: number,
-        paymentMethod: string,
-        customerPaid: number
-    ) => Promise<void>;
-    addOrder: (newOrder: OrderType) => void;
+    completePayment: (orderId: number, paymentMethod: string, customerPaid: number) => Promise<void>;
 }
 
 const OrderContext = createContext<OrderContextType>({
     orders: [],
-    setOrders: () => {},
+    cashierOrders: [],
+    baristaOrders: [],
+    historyOrders: [],
+
     refreshOrders: async () => {},
     completePayment: async () => {},
-    addOrder: () => {},
 });
 
 export const useOrders = () => useContext(OrderContext);
 
-// ============================================
-// 2. PROVIDER
-// ============================================
 export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
-
     const [orders, setOrders] = useState<OrderType[]>([]);
+    const [cashierOrders, setCashierOrders] = useState<OrderType[]>([]);
+    const [baristaOrders, setBaristaOrders] = useState<OrderType[]>([]);
+    const [historyOrders, setHistoryOrders] = useState<OrderType[]>([]);
 
-    // ================================
-    // REFRESH ORDERS (HỢP NHẤT + CHUẨN HÓA)
-    // ================================
     const refreshOrders = async () => {
         try {
             const [cashier, barista] = await Promise.all([
@@ -72,68 +52,69 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
                 fetchBaristaOrders()
             ]);
 
-            // Chuẩn hóa POS Orders
-            const cashierNormalized: OrderType[] = cashier.map(o => ({
-                id: o.id,
-                orderNumber: o.orderNumber ?? o.id,
-                status: o.status,
-                items: o.items,
-                total: o.total,
-                time: o.createdAt,
-                type: "pos",
-                cashier: o.customerName,
-            }));
+            const posActive = cashier
+                .filter(o => o.status !== "completed")
+                .map(o => ({
+                    id: o.id,
+                    orderNumber: o.orderNumber,
+                    total: o.total,
+                    items: o.items,
+                    status: o.status,
+                    time: o.createdAt,
+                    type: "pos",
+                    cashier: o.customerName,
+                    paymentMethod: o.paymentMethod
+                }));
 
-            // Chuẩn hóa Barista Orders
-            const baristaNormalized: OrderType[] = barista.map(o => ({
+            const posHistory = cashier
+                .filter(o => o.status === "completed")
+                .map(o => ({
+                    id: o.id,
+                    orderNumber: o.orderNumber,
+                    total: o.total,
+                    items: o.items,
+                    status: "completed",
+                    time: o.createdAt,
+                    type: "history",
+                    cashier: o.customerName,
+                    paymentMethod: o.paymentMethod
+                }));
+
+            const baristaList = barista.map(o => ({
                 id: o.id,
-                orderNumber: o.orderNumber ?? o.id,
-                status: o.status,
-                items: o.items,
+                orderNumber: o.orderNumber,
                 total: o.total,
+                items: o.items,
+                status: o.status,
                 time: o.createdAt,
                 type: "barista",
                 cashier: "Barista",
             }));
 
-            setOrders([...cashierNormalized, ...baristaNormalized]);
+            setCashierOrders(posActive);
+            setBaristaOrders(baristaList);
+            setHistoryOrders(posHistory);
+            setOrders([...posActive, ...baristaList, ...posHistory]);
 
-        } catch (err) {
-            console.error("Lỗi load orders:", err);
-        }
-    };
-
-    // ================================
-    // ADD ORDER
-    // ================================
-    const addOrder = (newOrder: OrderType) => {
-        setOrders(prev => [newOrder, ...prev]);
-    };
-
-    // ================================
-    // COMPLETE PAYMENT
-    // ================================
-    const completePayment = async (
-        orderId: number,
-        paymentMethod: string,
-        customerPaid: number
-    ) => {
-        try {
-            await payOrder(orderId, paymentMethod, customerPaid);
-            await refreshOrders();
         } catch (error) {
-            console.error("Lỗi thanh toán:", error);
+            console.error("refreshOrders error:", error);
         }
+    };
+
+    const completePayment = async (orderId: number, paymentMethod: string, customerPaid: number) => {
+        await payOrder(orderId, paymentMethod, customerPaid);
+        await refreshOrders();
     };
 
     return (
         <OrderContext.Provider
             value={{
                 orders,
-                setOrders,
+                cashierOrders,
+                baristaOrders,
+                historyOrders,
                 refreshOrders,
                 completePayment,
-                addOrder,
             }}
         >
             {children}

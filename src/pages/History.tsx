@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function History() {
-  const { orders } = useOrders();
+const { orders = [] } = useOrders() || {};
 
   // Lọc ra các đơn hàng đã hoàn thành (đã thanh toán)
-  const completedOrders = orders.filter((order) => order.status === "completed");
+  const completedOrders = orders.filter((order) =>
+    ["completed", "done", "paid"].includes(order.status?.toLowerCase())
+  );
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString("vi-VN", {
@@ -79,8 +81,8 @@ export default function History() {
                   {order.total.toLocaleString("vi-VN")}₫
                 </TableCell>
                 <TableCell className="text-sm">
-                  <div>{formatDate(order.time)}</div>
-                  <div className="text-accent">{formatTime(order.time)}</div>
+                  <div>{formatDate(new Date(order.time))}</div>
+                  <div className="text-accent">{formatTime(new Date(order.time))}</div>
                 </TableCell>
                 <TableCell>
                   {/* ✅ FIX: Gọi hàm hiển thị nhãn phương thức thanh toán */}
