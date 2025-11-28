@@ -15,6 +15,7 @@ export interface OrderType {
     type?: string;
     cashier?: string;
     paymentMethod?: string;
+    paymentStatus?: string;
 }
 
 interface OrderContextType {
@@ -22,20 +23,22 @@ interface OrderContextType {
     cashierOrders: OrderType[];
     baristaOrders: OrderType[];
     historyOrders: OrderType[];
-
     refreshOrders: () => Promise<void>;
     completePayment: (orderId: number, paymentMethod: string, customerPaid: number) => Promise<void>;
+    setOrders: React.Dispatch<React.SetStateAction<OrderType[]>>;
 }
+
 
 const OrderContext = createContext<OrderContextType>({
     orders: [],
     cashierOrders: [],
     baristaOrders: [],
     historyOrders: [],
-
-    refreshOrders: async () => {},
-    completePayment: async () => {},
+    refreshOrders: async () => { },
+    completePayment: async () => { },
+    setOrders: () => {},
 });
+
 
 export const useOrders = () => useContext(OrderContext);
 
@@ -63,7 +66,8 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
                     time: o.createdAt,
                     type: "pos",
                     cashier: o.customerName,
-                    paymentMethod: o.paymentMethod
+                    paymentMethod: o.paymentMethod,
+                    paymentStatus: o.paymentStatus
                 }));
 
             const posHistory = cashier
@@ -77,7 +81,8 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
                     time: o.createdAt,
                     type: "history",
                     cashier: o.customerName,
-                    paymentMethod: o.paymentMethod
+                    paymentMethod: o.paymentMethod,
+                    paymentStatus: o.paymentStatus
                 }));
 
             const baristaList = barista.map(o => ({
@@ -89,6 +94,9 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
                 time: o.createdAt,
                 type: "barista",
                 cashier: "Barista",
+                paymentStatus: o.paymentStatus ?? null,
+                paymentMethod: o.paymentMethod ?? null
+
             }));
 
             setCashierOrders(posActive);
@@ -101,9 +109,10 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
-    const completePayment = async (orderId: number, paymentMethod: string, customerPaid: number) => {
+    const completePayment = async (orderId: number, 
+        paymentMethod: string, 
+        customerPaid: number) => {
         await payOrder(orderId, paymentMethod, customerPaid);
-        await refreshOrders();
     };
 
     return (
@@ -115,6 +124,7 @@ export const OrderProvider = ({ children }: { children: React.ReactNode }) => {
                 historyOrders,
                 refreshOrders,
                 completePayment,
+                setOrders,
             }}
         >
             {children}

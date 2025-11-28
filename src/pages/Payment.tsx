@@ -5,45 +5,55 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 export default function Payment() {
-  const { orders, completePayment, refreshOrders } = useOrders();
+  const { orders, completePayment, refreshOrders, setOrders } = useOrders();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
-  // Load danh sách khi mở trang
   useEffect(() => {
-    refreshOrders();
-  }, []);
+    if (selectedOrderId && !orders.some(o => o.id === selectedOrderId)) {
+      setSelectedOrderId(null);
+    }
+  }, [orders]);
 
-  // ==============================
-  // ĐƠN CHỜ THANH TOÁN
-  // ==============================
+
+  // Lọc đơn: barista pha xong => chờ thanh toán
   const pendingPaymentOrders = orders.filter(
     (o) =>
-      o.status === "done" &&       // barista đã pha xong
-      o.paymentStatus !== "paid"   // chưa thanh toán
+      o.status === "done" &&
+      o.paymentStatus !== "paid"
   );
+
 
   const selectedOrder = orders.find(
-    (o) => Number(o.id) === selectedOrderId
+    (o) => o.id === selectedOrderId
   );
 
-  // ==============================
-  // XỬ LÝ THANH TOÁN
-  // ==============================
-  const handleCompletePayment = async (paymentMethod: any, customerPaid: number) => {
+  const handleCompletePayment = async (paymentMethod: string, customerPaid: number) => {
     if (!selectedOrderId) return;
 
-    await completePayment(selectedOrderId, paymentMethod, customerPaid);
+    try {
+      // 1. Thanh toán
+      await completePayment(selectedOrderId, paymentMethod, customerPaid);
 
-    toast.success("Thanh toán thành công!");
+      // 2. XÓA ORDER TRÊN UI NGAY LẬP TỨC
+      // (optimistic update)
+      setOrders((prev: any) => prev.filter((o: any) => o.id !== selectedOrderId));
 
-    await refreshOrders();  // để đơn biến khỏi Payment & xuất hiện ở History
+      // 3. Thông báo
+      toast.success("Thanh toán thành công!");
 
-    setSelectedOrderId(null);
+      // 4. Clear selected
+      setSelectedOrderId(null);
+
+      // 5. Refresh 1 lần duy nhất (đồng bộ backend)
+      refreshOrders();
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Thanh toán thất bại!");
+    }
   };
 
-  // ==============================
-  // MÀN CHI TIẾT THANH TOÁN
-  // ==============================
+
   if (selectedOrder) {
     return (
       <div className="p-6">
@@ -56,21 +66,20 @@ export default function Payment() {
     );
   }
 
-  // ==============================
-  // UI CHỜ THANH TOÁN
-  // ==============================
   return (
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-2">Chờ thanh toán</h1>
-        <p className="text-sm text-muted-foreground">Chọn đơn hàng để thanh toán</p>
+        <p className="text-sm text-muted-foreground">
+          Chọn đơn hàng để thanh toán
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {pendingPaymentOrders.map((order) => (
           <button
             key={order.id}
-            onClick={() => setSelectedOrderId(Number(order.id))}
+            onClick={() => setSelectedOrderId(order.id)}
             className="text-left p-5 bg-card border border-border rounded-xl hover:border-accent transition-colors"
           >
             <div className="flex items-center justify-between mb-3">

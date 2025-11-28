@@ -54,15 +54,18 @@ export async function sendOrderToBarista(id: number) {
 export async function payOrder(orderId: number, paymentMethod: string, customerPaid: number) {
   try {
     const res = await api.post(`/api/pos/orders/pay/${orderId}`, {
-      paymentMethod,
-      customerPaid,
+      PaymentMethod: paymentMethod,    // đúng theo backend
+      AmountPaid: customerPaid,        // đúng theo backend
     });
+
     return res.data;
   } catch (err) {
     console.error(">>> payOrder ERROR:", err);
     throw err;
   }
 }
+
+
 
 /**
  * ============================================
