@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
-import { Bell, Clock, LogOut } from "lucide-react";
+import { Bell, Clock, LogOut, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useShiftStore } from "@/components/shiftStore";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface CashierHeaderProps {
   onLogout: () => void;
@@ -10,6 +18,7 @@ interface CashierHeaderProps {
 
 export function CashierHeader({ onLogout, cashierName }: CashierHeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { shift, setShift } = useShiftStore();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -26,40 +35,73 @@ export function CashierHeader({ onLogout, cashierName }: CashierHeaderProps) {
     });
   };
 
+  const shiftTimeMap: Record<string, string> = {
+    "Sáng": "(08:00 - 12:00)",
+    "Trưa": "(12:00 - 16:00)",
+    "Chiều": "(16:00 - 21:00)",
+  };
+
   return (
     <header className="border-b border-border bg-card px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
+          {/* Logo + Shift */}
           <div className="flex items-center gap-2">
             <div className="h-10 w-10 rounded-full bg-success flex items-center justify-center">
               <span className="text-lg font-bold text-success-foreground">P</span>
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Phúc Long</h1>
-              <p className="text-sm text-muted-foreground">
-                Ca sáng <span className="text-accent">(08:00-12:00)</span>
-              </p>
+              <h1 className="text-lg font-semibold">Arum</h1>
+
+              {/* Dropdown chọn ca */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-sm text-muted-foreground flex items-center gap-1 hover:text-accent transition">
+                    Ca {shift} 
+                    <span className="text-accent">{shiftTimeMap[shift]}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setShift("Sáng")}>
+                    Ca sáng (08:00 - 12:00)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShift("Trưa")}>
+                    Ca trưa (12:00 - 16:00)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShift("Chiều")}>
+                    Ca chiều (16:00 - 21:00)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
+
           <div className="h-8 w-px bg-border" />
+
+          {/* Cashier name */}
           <div className="text-sm">
             <span className="text-muted-foreground">Cashier: </span>
-            <span className="font-medium">{cashierName}</span>          </div>
+            <span className="font-medium">{cashierName}</span>
+          </div>
         </div>
 
+        {/* Right-side: Bell, Clock, Logout */}
         <div className="flex items-center gap-4">
           <div className="relative">
             <button className="relative p-2 hover:bg-muted rounded-lg transition-colors">
               <Bell className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-accent text-xs">
-                3
-              </Badge>
             </button>
           </div>
+
           <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-mono text-accent">{formatTime(currentTime)}</span>
+            <span className="text-sm font-mono text-accent">
+              {formatTime(currentTime)}
+            </span>
           </div>
+
           <Button
             variant="ghost"
             size="sm"

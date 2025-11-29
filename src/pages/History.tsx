@@ -1,4 +1,7 @@
 import { useOrders } from "@/contexts/OrderContext";
+import { useEffect, useState } from "react";
+import { fetchCashierHistory } from "@/services/cashierHistory.service";
+
 import {
   Table,
   TableBody,
@@ -11,7 +14,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function History() {
-const { orders = [] } = useOrders() || {};
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    const data = await fetchCashierHistory();
+    setOrders(data);
+  };
 
   // Lọc ra các đơn hàng đã hoàn thành (đã thanh toán)
   const completedOrders = orders.filter((order) =>

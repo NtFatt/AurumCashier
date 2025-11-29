@@ -4,9 +4,9 @@ import { Badge } from "@/components/ui/badge";
 
 const menuItems = [
   { icon: Store, label: "Bán hàng trực tiếp", path: "/direct-sales" },
-  { icon: ShoppingCart, label: "Đơn mới", path: "/", count: 3 },
-  { icon: Receipt, label: "Đang pha", path: "/processing", count: 2 },
-  { icon: CreditCard, label: "Chờ thanh toán", path: "/payment", count: 4 },
+  { icon: ShoppingCart, label: "Đơn mới", path: "/" },
+  { icon: Receipt, label: "Đang pha", path: "/processing" },
+  { icon: CreditCard, label: "Chờ thanh toán", path: "/payment" },
   { icon: History, label: "Lịch sử giao dịch", path: "/history" },
   { icon: Settings, label: "Menu & Công thức", path: "/menu" },
 ];
@@ -28,11 +28,6 @@ export function CashierSidebar() {
               <item.icon className="h-5 w-5" />
               <span>{item.label}</span>
             </div>
-            {item.count && (
-              <Badge variant="secondary" className="ml-auto bg-accent text-accent-foreground">
-                {item.count}
-              </Badge>
-            )}
           </NavLink>
         ))}
       </nav>
