@@ -14,6 +14,10 @@ import { productService } from "@/services/product.service";
 import { PaymentDialog } from "@/components/cashier/PaymentDialog";
 import { createOrderApi } from "@/services/orderWorkflow";
 
+
+// ===============================
+// INTERFACES + CONST
+// ===============================
 interface Product {
   id: string;
   name: string;
@@ -24,15 +28,12 @@ interface Product {
   hasToppings?: boolean;
 }
 
-// --- Constants ---
-
 const sizes = [
   { id: "S", name: "Size S", price: 0 },
   { id: "M", name: "Size M", price: 5000 },
   { id: "L", name: "Size L", price: 10000 },
 ];
 
-// 🔑 CHỈ DÙNG MỘT BIẾN toppingOptions DUY NHẤT
 const toppingOptions = [
   { id: "pearl", name: "Trân châu đen", price: 8000 },
   { id: "pearl-white", name: "Trân châu trắng", price: 8000 },
@@ -72,27 +73,51 @@ interface CartItem {
   note?: string;
 }
 
+
+// ===============================
+// COMPONENT
+// ===============================
 export default function DirectSales() {
+
+  const user = JSON.parse(localStorage.getItem("auth_user") || "{}");
+
+  // STATES
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
 
-  // Customize options state
   const [selectedSize, setSelectedSize] = useState("M");
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [selectedIce, setSelectedIce] = useState("100");
 
-  // Data states
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  // Payment states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [orderToPay, setOrderToPay] = useState<any>(null);
 
-  // 1. Fetch Products
+  const [moneyReceived, setMoneyReceived] = useState<number | null>(null);
+  const [changeAmount, setChangeAmount] = useState(0);
+
+  // TOTAL AMOUNT
+  const totalAmount = cart.reduce(
+    (sum, item) => sum + item.totalPrice * item.quantity,
+    0
+  );
+
+  // AUTO CALCULATE CHANGE
+  useEffect(() => {
+    if (moneyReceived !== null && moneyReceived >= totalAmount) {
+      setChangeAmount(moneyReceived - totalAmount);
+    } else {
+      setChangeAmount(0);
+    }
+  }, [moneyReceived, totalAmount]);
+
+
+  // FETCH PRODUCTS
   useEffect(() => {
     const fetchProducts = async () => {
       setLoadingProducts(true);
@@ -100,24 +125,24 @@ export default function DirectSales() {
         const data = await productService.getAllProductsForCashier();
         setProducts(data);
       } catch (error) {
-        console.error("Lỗi tải sản phẩm:", error);
-        toast.error("Không thể tải danh sách sản phẩm. Kiểm tra API.");
+        toast.error("Không thể tải danh sách sản phẩm.");
       } finally {
         setLoadingProducts(false);
       }
     };
-
     fetchProducts();
   }, []);
 
-  // 2. Filter Products
+  // Filter products
   const filteredProducts = products.filter((p) => {
     const matchCategory = selectedCategory === "all" || p.category === selectedCategory;
     const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCategory && matchSearch;
   });
 
-  // 3. Helper Functions
+  // ===========================
+  // CART HELPERS
+  // ===========================
   const openCustomizeDialog = (product: Product) => {
     setSelectedProduct(product);
     setSelectedSize("M");
@@ -128,23 +153,28 @@ export default function DirectSales() {
 
   const calculateItemPrice = (product: Product, size: string, toppingIds: string[]) => {
     let price = product.price;
+
     if (product.hasSize) {
       const sizeOption = sizes.find((s) => s.id === size);
       if (sizeOption) price += sizeOption.price;
     }
+
     if (product.hasToppings) {
-      toppingIds.forEach((toppingId) => {
-        const topping = toppingOptions.find((t) => t.id === toppingId);
+      toppingIds.forEach((id) => {
+        const topping = toppingOptions.find((t) => t.id === id);
         if (topping) price += topping.price;
       });
     }
+
     return price;
   };
 
   const addToCart = () => {
     if (!selectedProduct) return;
+
     const totalPrice = calculateItemPrice(selectedProduct, selectedSize, selectedToppings);
-    setCart((prev) => [
+
+    setCart(prev => [
       ...prev,
       {
         product: selectedProduct,
@@ -153,118 +183,118 @@ export default function DirectSales() {
         selectedToppings: selectedProduct.hasToppings ? selectedToppings : [],
         ice: selectedIce,
         totalPrice,
-      },
+      }
     ]);
-    toast.success(`Đã thêm ${selectedProduct.name} vào giỏ hàng`);
+
+    toast.success(`Đã thêm ${selectedProduct.name}`);
     setCustomizeDialogOpen(false);
   };
 
   const updateQuantity = (index: number, delta: number) => {
-    setCart((prev) =>
+    setCart(prev =>
       prev
         .map((item, i) =>
           i === index
             ? { ...item, quantity: Math.max(0, item.quantity + delta) }
             : item
         )
-        .filter((item) => item.quantity > 0)
+        .filter(item => item.quantity > 0)
     );
   };
 
   const removeFromCart = (index: number) => {
-    setCart((prev) => prev.filter((_, i) => i !== index));
+    setCart(prev => prev.filter((_, i) => i !== index));
   };
 
-  const totalAmount = cart.reduce(
-    (sum, item) => sum + item.totalPrice * item.quantity,
-    0
-  );
 
-  // 4. Handle Checkout (Async API Call)
+  // ===========================
+  // HANDLE CHECKOUT
+  // ===========================
   const handleCheckout = async () => {
+
     if (cart.length === 0) {
       toast.error("Giỏ hàng trống");
       return;
     }
 
-    // Chuẩn bị payload gửi BE
+    if (moneyReceived === null || moneyReceived < totalAmount) {
+      toast.error("Tiền khách đưa không đủ");
+      return;
+    }
+
     const itemsPayload = cart.map((item) => ({
-      productId: parseInt(item.product.id, 10),
-      name: item.product.name,
+      productId: Number(item.product.id),
       quantity: item.quantity,
-      price: item.totalPrice,
-      size: item.size || 'M',
-      // 🔑 Dùng toppingOptions đúng
-      toppings: item.selectedToppings.map((id) => toppingOptions.find((t) => t.id === id)?.name || ""),
+      price: item.product.price,   // ✔ REQUIRED
+      size: null,                  // ✔ POS không hỗ trợ size menu
+      sugar: null,                 // ✔ POS option
+      ice: null,                   // ✔ POS option
+      topping: null,               // ✔ topping là string, không phải array
     }));
+
+
 
     const orderPayload = {
       items: itemsPayload,
-
-      // FE phải gửi
       subtotal: totalAmount,
       total: totalAmount,
       shippingFee: 0,
       serviceFee: 0,
       discountAmount: 0,
-      voucherCode: null,
 
-      // BẮT BUỘC phải có
-      paymentMethod: "COD",            // thanh toán tại quầy
-      fulfillmentMethod: "AtStore",    // đơn tại chỗ (DirectSales)
+      storeId: user.storeId,
+      cashierId: user.id,
+
+      orderType: "DirectSale",
+      fulfillmentMethod: "AtStore",
       pickupMethod: "AtStore",
 
-      // Delivery info – không dùng → set null
+      paymentMethod: "Cash",
+      isOnlinePaid: false,
+
+      moneyReceived,
+      changeAmount,
+
       shippingAddress: null,
       lat: null,
-      lng: null,
+      lng: null
+    }
 
-      storeId: 1,
-      isOnlinePaid: false
-    };
 
 
     try {
-      // Gọi API tạo đơn
-      const createRes = await createOrderApi(orderPayload);
-      const dbOrderId = createRes.data?.orderId;
-      const dbTotalAmount = createRes.data?.totalAmount || totalAmount;
+      const res = await createOrderApi(orderPayload);
 
-      if (!dbOrderId) {
-        throw new Error("Không nhận được ID đơn hàng từ máy chủ.");
-      }
-
-      // Tạo object hiển thị FE
-      const finalizedOrder = {
-        id: dbOrderId.toString(),
-        orderNumber: dbOrderId,
-        status: "pending" as const,
-        items: orderPayload.items,
-        total: dbTotalAmount,
-        time: new Date(),
-        type: "dine-in" as const,
+      const finalOrder = {
+        id: res.data.orderId,
+        orderNumber: res.data.orderId,
+        items: itemsPayload,
+        total: totalAmount,
         cashier: "Thu ngân",
+        time: new Date(),
+        moneyReceived,
+        changeAmount
       };
 
-      // Cập nhật UI
-      setOrderToPay(finalizedOrder);
-      setOrderToPay(finalizedOrder);
+      setOrderToPay(finalOrder);
       setPaymentDialogOpen(true);
       setCart([]);
-      toast.success(`Đã tạo đơn hàng #${finalizedOrder.orderNumber}!`);
 
-    } catch (error: any) {
-      console.error("Lỗi tạo đơn hàng:", error);
-      toast.error(`Tạo đơn hàng thất bại: ${error.message}`);
+    } catch (err) {
+      toast.error("Lỗi tạo đơn hàng");
     }
   };
 
+
+  // =====================================================
+  // RETURN UI — CHỈ MỘT RETURN DUY NHẤT
+  // =====================================================
   return (
     <div className="h-full flex bg-background">
-      {/* --- Left Side: Product List --- */}
+
+      {/* LEFT */}
       <div className="w-2/3 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="p-6 border-b border-border bg-card">
+        <div className="p-6 border-b bg-card">
           <h1 className="text-2xl font-bold mb-4">Bán hàng trực tiếp</h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -277,8 +307,7 @@ export default function DirectSales() {
           </div>
         </div>
 
-        {/* Categories */}
-        <div className="px-6 py-4 border-b border-border bg-card/50">
+        <div className="px-6 py-4 border-b bg-card/50">
           <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
             <TabsList className="w-full justify-start">
               {categories.map((cat) => (
@@ -291,41 +320,31 @@ export default function DirectSales() {
           </Tabs>
         </div>
 
-        {/* Product Grid */}
         <div className="flex-1 overflow-y-auto p-6">
           {loadingProducts ? (
-            <div className="text-center text-muted-foreground py-10">
-              ☕ Đang tải menu từ máy chủ...
-            </div>
+            <div className="text-center text-muted-foreground py-10">Đang tải...</div>
           ) : filteredProducts.length === 0 ? (
-            <div className="text-center text-muted-foreground py-10">
-              😞 Không tìm thấy sản phẩm nào.
-            </div>
+            <div className="text-center text-muted-foreground py-10">Không có sản phẩm</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredProducts.map((product) => (
                 <Card
                   key={product.id}
-                  className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+                  className="cursor-pointer hover:shadow-lg hover:scale-105 transition"
                   onClick={() => openCustomizeDialog(product)}
                 >
                   <CardContent className="p-4">
-                    <div className="mb-3 flex justify-center h-24 w-full">
+                    <div className="mb-3 flex justify-center h-24">
                       <img
                         src={product.image}
                         alt={product.name}
-                        className="h-full w-auto object-cover rounded-lg"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x=\'50%\' y=\'50%\' style=\'font-size:70px; text-anchor:middle;\'>☕</text></svg>';
-                          e.currentTarget.className = "h-full w-auto object-contain";
-                        }}
+                        className="h-full object-cover rounded-lg"
                       />
                     </div>
-                    <h3 className="font-semibold text-sm mb-2 line-clamp-2">{product.name}</h3>
+                    <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
                     <p className="text-primary font-bold">{product.price.toLocaleString("vi-VN")}đ</p>
                   </CardContent>
-                  <CardFooter className="p-3 pt-0">
+                  <CardFooter className="p-2">
                     <Button size="sm" className="w-full" variant="secondary">
                       <Plus className="h-4 w-4 mr-1" /> Thêm
                     </Button>
@@ -337,10 +356,11 @@ export default function DirectSales() {
         </div>
       </div>
 
-      {/* --- Right Side: Cart Sidebar --- */}
-      <div className="w-1/3 border-l border-border bg-card flex flex-col">
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center gap-2 mb-2">
+
+      {/* RIGHT */}
+      <div className="w-1/3 border-l bg-card flex flex-col">
+        <div className="p-6 border-b">
+          <div className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-bold">Giỏ hàng</h2>
             <Badge variant="secondary" className="ml-auto">{cart.length}</Badge>
@@ -348,184 +368,155 @@ export default function DirectSales() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
           {cart.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
-              <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>Giỏ hàng trống</p>
+              <ShoppingCart className="h-12 w-12 mx-auto opacity-50 mb-2" />
+              Giỏ hàng trống
             </div>
           ) : (
             cart.map((item, index) => (
               <Card key={index} className="p-3">
                 <div className="flex items-start gap-3">
-                  {/* Product Image in Cart */}
-                  <div className="flex-shrink-0 h-12 w-12">
-                    <img
-                      src={item.product.image}
-                      alt={item.product.name}
-                      className="h-full w-full object-cover rounded-lg"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x=\'50%\' y=\'50%\' style=\'font-size:70px; text-anchor:middle;\'>☕</text></svg>';
-                        e.currentTarget.className = "h-full w-full object-contain";
-                      }}
-                    />
+
+                  <div className="h-12 w-12 shrink-0">
+                    <img src={item.product.image} className="h-full w-full object-cover rounded-lg" />
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-sm mb-1 line-clamp-1">{item.product.name}</h4>
-                    <div className="text-xs text-muted-foreground mb-2 space-y-1">
+                    <h4 className="font-semibold text-sm">{item.product.name}</h4>
+
+                    <div className="text-xs text-muted-foreground mb-2">
                       {item.size && (
-                        <div className="flex items-center gap-1">
-                          <Badge variant="outline" className="text-xs py-0 px-1.5">{item.size}</Badge>
-                          <Badge variant="outline" className="text-xs py-0 px-1.5">{iceOptions.find((i) => i.id === item.ice)?.name}</Badge>
-                        </div>
-                      )}
-                      {item.selectedToppings.length > 0 && (
-                        <div className="text-xs">
-                          {item.selectedToppings.map((toppingId) => {
-                            // 🔑 FIX: Dùng toppingOptions
-                            const topping = toppingOptions.find((t) => t.id === toppingId);
-                            return topping ? (
-                              <Badge key={toppingId} variant="secondary" className="text-xs mr-1 py-0 px-1.5">
-                                + {topping.name}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>
+                        <Badge variant="outline" className="text-xs">{item.size}</Badge>
                       )}
                     </div>
-                    <p className="text-primary font-bold text-sm mb-2">{item.totalPrice.toLocaleString("vi-VN")}đ</p>
-                    <div className="flex items-center gap-2">
-                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateQuantity(index, -1)}><Minus className="h-3 w-3" /></Button>
-                      <span className="font-semibold w-8 text-center">{item.quantity}</span>
-                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateQuantity(index, 1)}><Plus className="h-3 w-3" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 ml-auto text-destructive hover:text-destructive" onClick={() => removeFromCart(index)}><Trash2 className="h-3 w-3" /></Button>
+
+                    <p className="font-bold text-sm text-primary">
+                      {item.totalPrice.toLocaleString("vi-VN")}đ
+                    </p>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button size="icon" variant="outline" onClick={() => updateQuantity(index, -1)}>
+                        <Minus className="h-3 w-3" />
+                      </Button>
+
+                      <span className="w-6 text-center">{item.quantity}</span>
+
+                      <Button size="icon" variant="outline" onClick={() => updateQuantity(index, 1)}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+
+                      <Button size="icon" variant="ghost" className="ml-auto text-destructive"
+                        onClick={() => removeFromCart(index)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
+
                   </div>
+
                 </div>
               </Card>
             ))
           )}
 
-          {/* Payment Summary & Button (Inside Scroll Area) */}
           {cart.length > 0 && (
-            <div className="p-2 space-y-4 border-t border-border mt-4">
+            <div className="mt-4 p-2 border-t space-y-3">
+
+              <div className="flex justify-between text-sm">
+                <span>Tổng cộng</span>
+                <span className="font-bold text-primary">{totalAmount.toLocaleString("vi-VN")}đ</span>
+              </div>
+
               <div className="space-y-2">
+                <Label>Tiền khách đưa</Label>
+                <Input
+                  type="number"
+                  value={moneyReceived ?? ""}
+                  onChange={(e) => setMoneyReceived(Number(e.target.value))}
+                />
+
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tạm tính</span>
-                  <span className="font-semibold">{totalAmount.toLocaleString("vi-VN")}đ</span>
-                </div>
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Tổng cộng</span>
-                  <span className="text-primary flex-shrink-0">{totalAmount.toLocaleString("vi-VN")}đ</span>
+                  <span>Tiền thối lại</span>
+                  <span className="font-bold text-primary">{changeAmount.toLocaleString("vi-VN")}đ</span>
                 </div>
               </div>
-              <div className="px-2">
-                <Button size="lg" className="w-full px-2" disabled={cart.length === 0} onClick={handleCheckout}>
-                  Thanh toán
-                </Button>
-              </div>
+
+              <Button className="w-full" size="lg" onClick={handleCheckout}>
+                Thanh toán
+              </Button>
+
             </div>
           )}
+
         </div>
       </div>
 
-      {/* --- Customize Dialog --- */}
+
+      {/* Customize Dialog */}
       <Dialog open={customizeDialogOpen} onOpenChange={setCustomizeDialogOpen}>
-        <DialogContent className="max-w-md bg-card">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl">Tùy chỉnh đồ uống</DialogTitle>
+            <DialogTitle>Tùy chỉnh đồ uống</DialogTitle>
           </DialogHeader>
+
           {selectedProduct && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 pb-4 border-b border-border">
-                <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center">
-                  <img
-                    src={selectedProduct.image}
-                    alt={selectedProduct.name}
-                    className="h-full w-full object-cover rounded"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x=\'50%\' y=\'50%\' style=\'font-size:70px; text-anchor:middle;\'>☕</text></svg>';
-                      e.currentTarget.className = "h-full w-full object-contain";
-                    }}
-                  />
-                </div>
+            <div className="space-y-4">
+
+              <div className="flex items-center gap-3">
+                <img src={selectedProduct.image} className="h-12 w-12 object-cover rounded" />
                 <div>
-                  <h3 className="font-semibold">{selectedProduct.name}</h3>
-                  <p className="text-sm text-primary font-bold">{selectedProduct.price.toLocaleString("vi-VN")}đ</p>
+                  <h3 className="font-medium">{selectedProduct.name}</h3>
+                  <p className="font-bold text-primary">{selectedProduct.price.toLocaleString("vi-VN")}đ</p>
                 </div>
               </div>
+
               {selectedProduct.hasSize && (
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">Chọn size</Label>
-                  <RadioGroup value={selectedSize} onValueChange={setSelectedSize}>
-                    <div className="grid grid-cols-3 gap-2">
-                      {sizes.map((size) => (
-                        <div key={size.id} className="relative">
-                          <RadioGroupItem value={size.id} id={size.id} className="peer sr-only" />
-                          <Label htmlFor={size.id} className="flex flex-col items-center justify-center p-3 border-2 border-border rounded-lg cursor-pointer peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/10 hover:bg-muted transition-colors">
-                            <span className="font-semibold">{size.name}</span>
-                            {size.price > 0 && <span className="text-xs text-muted-foreground">+{size.price.toLocaleString("vi-VN")}đ</span>}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
+                <div>
+                  <Label>Chọn size</Label>
+                  <RadioGroup value={selectedSize} onValueChange={setSelectedSize} className="grid grid-cols-3 gap-2 mt-2">
+                    {sizes.map((size) => (
+                      <Label key={size.id} className="border rounded p-2 text-center cursor-pointer">
+                        <RadioGroupItem value={size.id} id={size.id} className="hidden" />
+                        {size.name}
+                      </Label>
+                    ))}
                   </RadioGroup>
                 </div>
               )}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Lượng đá</Label>
-                <RadioGroup value={selectedIce} onValueChange={setSelectedIce}>
-                  <div className="grid grid-cols-3 gap-2">
-                    {iceOptions.map((ice) => (
-                      <div key={ice.id} className="relative">
-                        <RadioGroupItem value={ice.id} id={`ice-${ice.id}`} className="peer sr-only" />
-                        <Label htmlFor={`ice-${ice.id}`} className="flex items-center justify-center p-3 border-2 border-border rounded-lg cursor-pointer peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/10 hover:bg-muted transition-colors text-sm font-medium text-center">
-                          {ice.name}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </RadioGroup>
-              </div>
+
               {selectedProduct.hasToppings && (
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">Topping (tùy chọn)</Label>
-                  <div className="space-y-2">
-                    {toppingOptions.map((topping) => ( // 🔑 FIX: Dùng toppingOptions
-                      <div key={topping.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted transition-colors">
-                        <div className="flex items-center gap-3">
+                <div>
+                  <Label>Topping</Label>
+                  <div className="space-y-2 mt-2">
+                    {toppingOptions.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           <Checkbox
-                            id={topping.id}
-                            checked={selectedToppings.includes(topping.id)}
+                            checked={selectedToppings.includes(t.id)}
                             onCheckedChange={(checked) => {
-                              if (checked) setSelectedToppings([...selectedToppings, topping.id]);
-                              else setSelectedToppings(selectedToppings.filter((id) => id !== topping.id));
+                              if (checked) setSelectedToppings([...selectedToppings, t.id]);
+                              else setSelectedToppings(selectedToppings.filter((x) => x !== t.id));
                             }}
                           />
-                          <Label htmlFor={topping.id} className="font-medium cursor-pointer">{topping.name}</Label>
+                          <span>{t.name}</span>
                         </div>
-                        <span className="text-sm font-semibold text-primary">+{topping.price.toLocaleString("vi-VN")}đ</span>
+                        <span className="text-primary font-bold">{t.price.toLocaleString("vi-VN")}đ</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <span className="font-semibold">Tổng cộng:</span>
-                <span className="text-xl font-bold text-primary">{calculateItemPrice(selectedProduct, selectedSize, selectedToppings).toLocaleString("vi-VN")} đ</span>
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setCustomizeDialogOpen(false)}>Hủy</Button>
-                <Button className="flex-1" onClick={addToCart}>Thêm vào giỏ</Button>
-              </div>
+
+              <Button className="w-full" onClick={addToCart}>Thêm vào giỏ</Button>
             </div>
           )}
+
         </DialogContent>
       </Dialog>
 
-      {/* --- Payment Dialog --- */}
+
+      {/* PaymentDialog */}
       {orderToPay && (
         <PaymentDialog
           isOpen={paymentDialogOpen}
@@ -536,6 +527,7 @@ export default function DirectSales() {
           order={orderToPay}
         />
       )}
+
     </div>
   );
 }
