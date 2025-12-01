@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { productService } from "@/services/product.service";
 import { PaymentDialog } from "@/components/cashier/PaymentDialog";
 import { createOrderApi } from "@/services/orderWorkflow";
-
+import { ToppingService } from "@/lib/menu/toppingService";
 
 // ===============================
 // INTERFACES + CONST
@@ -29,23 +29,10 @@ interface Product {
 }
 
 const sizes = [
-  { id: "S", name: "Size S", price: 0 },
-  { id: "M", name: "Size M", price: 5000 },
-  { id: "L", name: "Size L", price: 10000 },
+  { id: "M", name: "Size M", diff: -14000 },
+  { id: "L", name: "Size L", diff: 0 },
 ];
 
-const toppingOptions = [
-  { id: "pearl", name: "Trân châu đen", price: 8000 },
-  { id: "pearl-white", name: "Trân châu trắng", price: 8000 },
-  { id: "jelly", name: "Thạch rau câu", price: 8000 },
-  { id: "jelly-coffee", name: "Thạch cà phê", price: 10000 },
-  { id: "pudding", name: "Pudding", price: 10000 },
-  { id: "aloe", name: "Nha đam", price: 8000 },
-  { id: "cheese", name: "Phô mai kem", price: 15000 },
-  { id: "egg", name: "Trứng cút", price: 8000 },
-  { id: "coconut", name: "Dừa dầm", price: 10000 },
-  { id: "longan", name: "Nhãn", price: 12000 },
-];
 
 const categories = [
   { id: "all", name: "Tất cả", icon: "🍽️" },
@@ -93,6 +80,8 @@ export default function DirectSales() {
   const [selectedIce, setSelectedIce] = useState("100");
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [toppings, setToppings] = useState<any[]>([]);
+
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -119,19 +108,26 @@ export default function DirectSales() {
 
   // FETCH PRODUCTS
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchData = async () => {
       setLoadingProducts(true);
       try {
-        const data = await productService.getAllProductsForCashier();
-        setProducts(data);
+        const [productData, toppingData] = await Promise.all([
+          productService.getAllProductsForCashier(),
+          ToppingService.getAll(),
+        ]);
+      console.log("TOPPING DATA:", toppingData);
+
+        setProducts(productData);
+        setToppings(toppingData);   // ✔ topping từ DB
       } catch (error) {
-        toast.error("Không thể tải danh sách sản phẩm.");
+        toast.error("Không thể tải dữ liệu.");
       } finally {
         setLoadingProducts(false);
       }
     };
-    fetchProducts();
+    fetchData();
   }, []);
+
 
   // Filter products
   const filteredProducts = products.filter((p) => {
@@ -154,20 +150,19 @@ export default function DirectSales() {
   const calculateItemPrice = (product: Product, size: string, toppingIds: string[]) => {
     let price = product.price;
 
-    if (product.hasSize) {
-      const sizeOption = sizes.find((s) => s.id === size);
-      if (sizeOption) price += sizeOption.price;
-    }
+    // Size
+    const sizeOption = sizes.find((s) => s.id === size);
+    if (sizeOption) price += sizeOption.diff;
 
-    if (product.hasToppings) {
-      toppingIds.forEach((id) => {
-        const topping = toppingOptions.find((t) => t.id === id);
-        if (topping) price += topping.price;
-      });
-    }
+    // Topping (KHÔNG dùng product.hasToppings nữa)
+    toppingIds.forEach((id) => {
+      const topping = toppings.find((t) => t.Id.toString() === id);
+      if (topping) price += topping.Price;
+    });
 
     return price;
   };
+
 
   const addToCart = () => {
     if (!selectedProduct) return;
@@ -180,7 +175,7 @@ export default function DirectSales() {
         product: selectedProduct,
         quantity: 1,
         size: selectedProduct.hasSize ? selectedSize : undefined,
-        selectedToppings: selectedProduct.hasToppings ? selectedToppings : [],
+        selectedToppings,
         ice: selectedIce,
         totalPrice,
       }
@@ -225,11 +220,12 @@ export default function DirectSales() {
     const itemsPayload = cart.map((item) => ({
       productId: Number(item.product.id),
       quantity: item.quantity,
-      price: item.product.price,   // ✔ REQUIRED
-      size: null,                  // ✔ POS không hỗ trợ size menu
-      sugar: null,                 // ✔ POS option
-      ice: null,                   // ✔ POS option
-      topping: null,               // ✔ topping là string, không phải array
+      price: item.totalPrice,  // ✔ đã tính size + topping
+      size: item.size || null,
+      sugar: null, // Cashier không chọn đường
+      ice: item.ice || null,
+      topping: item.selectedToppings.join(","),  // ✔ gửi ID topping
+      // ✔ topping là string, không phải array
     }));
 
 
@@ -472,38 +468,44 @@ export default function DirectSales() {
               </div>
 
               {selectedProduct.hasSize && (
-                <div>
-                  <Label>Chọn size</Label>
-                  <RadioGroup value={selectedSize} onValueChange={setSelectedSize} className="grid grid-cols-3 gap-2 mt-2">
-                    {sizes.map((size) => (
-                      <Label key={size.id} className="border rounded p-2 text-center cursor-pointer">
-                        <RadioGroupItem value={size.id} id={size.id} className="hidden" />
-                        {size.name}
-                      </Label>
-                    ))}
-                  </RadioGroup>
-                </div>
+             <div>
+  <Label>Chọn size</Label>
+  <div className="grid grid-cols-2 gap-3 mt-2">
+    {sizes.map((size) => (
+      <Button
+        key={size.id}
+        variant={selectedSize === size.id ? "default" : "outline"}
+        className="h-12 text-lg font-medium"
+        onClick={() => setSelectedSize(size.id)}
+      >
+        {size.name}
+      </Button>
+    ))}
+  </div>
+</div>
+
               )}
 
-              {selectedProduct.hasToppings && (
+              {selectedProduct.category !== "food" && (
                 <div>
                   <Label>Topping</Label>
                   <div className="space-y-2 mt-2">
-                    {toppingOptions.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between">
+                    {toppings.map((t) => (
+                      <div key={t.Id} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Checkbox
-                            checked={selectedToppings.includes(t.id)}
+                            checked={selectedToppings.includes(t.Id.toString())}
                             onCheckedChange={(checked) => {
-                              if (checked) setSelectedToppings([...selectedToppings, t.id]);
-                              else setSelectedToppings(selectedToppings.filter((x) => x !== t.id));
+                              if (checked) setSelectedToppings([...selectedToppings, t.Id.toString()]);
+                              else setSelectedToppings(selectedToppings.filter((x) => x !== t.Id.toString()));
                             }}
                           />
-                          <span>{t.name}</span>
+                          <span>{t.Name}</span>
                         </div>
-                        <span className="text-primary font-bold">{t.price.toLocaleString("vi-VN")}đ</span>
+                        <span className="text-primary font-bold">{t.Price.toLocaleString("vi-VN")}đ</span>
                       </div>
-                    ))}
+                    ))
+                    }
                   </div>
                 </div>
               )}
